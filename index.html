@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="字幕プレイヤー">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>字幕プレイヤー</title>
+<style>
+:root {
+  --bg: #fbfaf7; --fg: #1d1d1f; --muted: #66666c; --line: #e3e0d8;
+  --accent: #2f6fd6; --cur: #e7effc; --chip: #f0ede5; --btn: #ffffff; --on: #2f6fd6; --on-fg: #ffffff;
+  --note-bg: #fff3d1; --note-fg: #5e4300; --unc: #b4690e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --fg: #ececee; --muted: #9d9da5; --line: #2d2d31;
+    --accent: #7ea9ff; --cur: #1e2a42; --chip: #232327; --btn: #222225; --on: #3f70d2; --on-fg: #ffffff;
+    --note-bg: #3a2f12; --note-fg: #ffd98a; --unc: #f0a64a;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+[lang="ko"] { font-family: -apple-system, system-ui, "Apple SD Gothic Neo", "Noto Sans CJK KR", sans-serif; }
+button { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* 一覧 */
+.bar { padding: 14px 16px 6px; }
+.bar h1 { margin: 0; font-size: 1.3rem; }
+#libraryView main { max-width: 760px; margin: 0 auto; padding: 0 16px 40px; }
+.steps { margin: 8px 0 14px; padding-left: 1.3em; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.btn {
+  display: inline-block; padding: 11px 20px; border-radius: 12px; background: var(--on); color: var(--on-fg);
+  font-weight: 600; cursor: pointer;
+}
+#lib { margin: 16px 0 0; padding: 0; list-style: none; }
+#lib li { display: flex; align-items: center; gap: 10px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+#lib .open { flex: 1; text-align: left; padding: 0; border: 0; background: transparent; cursor: pointer; }
+#lib .title { display: block; font-size: 1rem; line-height: 1.4; }
+#lib .sub { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+#lib .del { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--btn); font-size: 13px; color: var(--muted); }
+.note { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--note-bg); color: var(--note-fg); font-size: 13px; line-height: 1.6; }
+
+/* プレイヤー */
+#top { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+#stage { position: relative; background: #000; aspect-ratio: 16 / 9; }
+#v { display: block; width: 100%; height: 100%; background: #000; }
+#picker {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 14px; background: #111; color: #f2f2f2; text-align: center; font-size: 14px;
+}
+#picker p { margin: 0; line-height: 1.5; }
+#picker .file { font-size: 12px; color: #a9a9b0; word-break: break-all; }
+.pick { display: inline-block; padding: 10px 22px; border-radius: 10px; background: var(--on); color: var(--on-fg); font-weight: 600; cursor: pointer; }
+.row { display: flex; gap: 6px; padding: 6px 8px 0; }
+.row:last-child { padding-bottom: 6px; }
+.row button {
+  flex: 1; min-height: 40px; padding: 0 2px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--btn); font-size: 14px; cursor: pointer; touch-action: manipulation;
+}
+.row.sub button { min-height: 34px; font-size: 12.5px; }
+.row button[aria-pressed="true"] { background: var(--on); color: var(--on-fg); border-color: transparent; }
+#info { padding: 6px 12px; background: var(--note-bg); color: var(--note-fg); font-size: 13px; line-height: 1.5; }
+#info button { margin-left: 8px; padding: 2px 10px; border: 1px solid currentColor; border-radius: 8px; background: transparent; }
+
+#list { max-width: 760px; margin: 0 auto; padding: 0 0 55vh; }
+.lead { margin: 0; padding: 10px 14px; font-size: 12px; line-height: 1.6; color: var(--muted); border-bottom: 1px solid var(--line); }
+.cue { padding: 10px 14px 12px; border-bottom: 1px solid var(--line); border-left: 4px solid transparent; cursor: pointer; }
+.cue.cur { background: var(--cur); border-left-color: var(--accent); }
+.meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.t { margin: 2px 0 4px; font-size: 1.25rem; line-height: 1.5; }
+.t .unc { text-decoration: underline dotted var(--unc); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.alt { margin: 0 0 4px; font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+.ja { margin: 0 0 6px; font-size: 0.92rem; line-height: 1.5; color: var(--muted); }
+.gl { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; padding: 0; list-style: none; }
+.gl li { padding: 1px 7px; border-radius: 6px; background: var(--chip); font-size: 0.8rem; line-height: 1.7; }
+.gl b { margin-right: 4px; font-weight: 600; }
+.gl i { margin-right: 4px; font-size: 0.7rem; font-style: normal; color: var(--muted); }
+body.hide-ja .ja, body.hide-gl .gl { display: none; }
+#follow {
+  position: fixed; right: 14px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 20;
+  padding: 10px 16px; border: 0; border-radius: 22px; background: var(--on); color: var(--on-fg);
+  font-size: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); cursor: pointer;
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  #playerView:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; }
+  #top { height: 100vh; height: 100dvh; display: flex; flex-direction: column; border-bottom: 0; border-right: 1px solid var(--line); }
+  #stage { flex: 1; min-height: 0; aspect-ratio: auto; }
+  #list { padding-bottom: 70vh; }
+}
+</style>
+</head>
+<body>
+<div id="libraryView">
+  <header class="bar"><h1>字幕プレイヤー</h1></header>
+  <main>
+    <ol class="steps">
+      <li>動画（.mp4）と字幕データ（.json）を「ファイル」アプリの「このiPhone内」に入れておく</li>
+      <li>下の「字幕データを追加」で .json を選ぶ（1 本につき最初の 1 回だけ）</li>
+      <li>一覧の題名をタップし、「動画を選ぶ」→「ファイルを選択」から .mp4 を選ぶ</li>
+    </ol>
+    <label class="btn">字幕データを追加<input id="addData" type="file" accept=".json,application/json" multiple hidden></label>
+    <p id="homeNote" class="note" hidden>ホーム画面に追加してから、ホーム画面のアイコンで開いてください。圏外でも開けるようになります。Safari で追加した字幕データは、ホーム画面のアプリからは見えません。</p>
+    <p id="libNote" class="note" hidden></p>
+    <ul id="lib"></ul>
+  </main>
+</div>
+
+<div id="playerView" hidden>
+  <header id="top">
+    <div id="stage">
+      <video id="v" controls playsinline preload="metadata"></video>
+      <div id="picker">
+        <p id="pickmsg">動画を選んでください。「ファイルを選択」から選びます（写真ライブラリからは選ばない）。</p>
+        <label class="pick">動画を選ぶ<input id="pickVideo" type="file" accept="video/*" hidden></label>
+        <p class="file" id="expect"></p>
+      </div>
+    </div>
+    <div class="row">
+      <button id="prev" type="button">◀ 前</button>
+      <button id="again" type="button">↻ もう一度</button>
+      <button id="next" type="button">次 ▶</button>
+    </div>
+    <div class="row sub">
+      <button id="step" type="button" aria-pressed="false">1行ずつ</button>
+      <button id="speed" type="button">1.0x</button>
+      <button id="tja" type="button" aria-pressed="true">日本語</button>
+      <button id="tgl" type="button" aria-pressed="true">単語</button>
+      <button id="back" type="button">一覧</button>
+    </div>
+    <div id="info" hidden></div>
+  </header>
+  <main id="list"></main>
+  <button id="follow" type="button" hidden>今の行へ ↓</button>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const x = localStorage.getItem('sp:' + k); return x === null ? d : JSON.parse(x); } catch (_) { return d; } },
+    set(k, x) { try { localStorage.setItem('sp:' + k, JSON.stringify(x)); return true; } catch (_) { return false; } },
+    del(k) { try { localStorage.removeItem('sp:' + k); } catch (_) { /* 消せなくても困らない */ } },
+  };
+  const fmt = (t) => { t = Math.max(0, Math.floor(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  const POS_ABBR = {
+    '名詞': '名', '固有名詞': '固', '代名詞': '代', '動詞': '動', '形容詞': '形', '副詞': '副', '句動詞': '句',
+    '熟語': '熟', '間投詞': '間', '感動詞': '感', '前置詞': '前', '接続詞': '接', '依存名詞': '依', '数詞': '数',
+    '補助用言': '補', '冠形詞': '冠', '接続副詞': '接',
+  };
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  // ---------------- 一覧 ----------------
+  const libView = $('libraryView'), playerView = $('playerView'), libEl = $('lib'), libNote = $('libNote');
+  $('homeNote').hidden = standalone;
+
+  function libIndex() { return store.get('lib', []); }
+  function renderLib() {
+    libEl.textContent = '';
+    for (const item of libIndex()) {
+      const li = document.createElement('li');
+      const open = document.createElement('button');
+      open.type = 'button'; open.className = 'open';
+      const title = document.createElement('span'); title.className = 'title'; title.textContent = item.title;
+      const sub = document.createElement('span'); sub.className = 'sub';
+      sub.textContent = fmt(item.duration || 0) + ' ・ ' + item.cues + ' 行' + (item.t ? ' ・ 前回 ' + fmt(item.t) : '');
+      open.append(title, sub);
+      open.addEventListener('click', () => openPlayer(item.id));
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '削除';
+      del.addEventListener('click', () => {
+        if (!window.confirm('「' + item.title + '」を一覧から消しますか？（動画ファイルは消えません）')) return;
+        store.del('data:' + item.id); store.del('t:' + item.id);
+        store.set('lib', libIndex().filter((x) => x.id !== item.id));
+        renderLib();
+      });
+      li.append(open, del);
+      libEl.appendChild(li);
+    }
+  }
+  function note(el, text) { el.textContent = text; el.hidden = !text; }
+
+  $('addData').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    const added = [], failed = [];
+    for (const f of files) {
+      try {
+        const data = JSON.parse(await f.text());
+        if (data.format !== 'study-player/1' || !Array.isArray(data.cues) || !data.cues.length) throw new Error('形式が違う');
+        const id = String(data.id || data.video || f.name);
+        if (!store.set('data:' + id, data)) throw new Error('保存できない（容量不足の可能性）');
+        const lib = libIndex().filter((x) => x.id !== id);
+        lib.unshift({ id, title: data.title || f.name, duration: data.duration || 0, cues: data.cues.length });
+        store.set('lib', lib);
+        added.push(data.title || f.name);
+      } catch (err) {
+        failed.push(f.name + '（' + err.message + '）');
+      }
+    }
+    try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) { /* 任意 */ }
+    note(libNote, (added.length ? added.length + ' 本追加しました。' : '') + (failed.length ? '追加できなかったもの: ' + failed.join(' / ') : ''));
+    renderLib();
+  });
+
+  // ---------------- プレイヤー ----------------
+  const v = $('v'), picker = $('picker'), pickmsg = $('pickmsg'), info = $('info'), top = $('top'), followBtn = $('follow'), list = $('list');
+  const ROLL = 0.25;   // 行の頭から再生する時に少し手前から始める（語頭を切らないため）
+  const PAD = 0.25;    // 1行ずつ止める時、字幕の終わりから少し待つ（次の行の頭は越えない）
+  const SPEEDS = [1, 0.85, 0.7];
+  const landscape = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+
+  let data = null, id = '', cues = [];
+  let cur = -1, holdUntil = -1, stopIdx = -1, stoppedAt = -1;
+  let ourSeek = false, follow = true, raf = 0, hasVideo = false, picked = false, objectUrl = null, trackUrls = [];
+  let step = store.get('step', false), speed = store.get('speed', 1);
+
+  function renderText(el, text, ranges) {
+    // ranges: 聞き取りが不確かな文字範囲 [[開始, 終了], ...]（自動の書き起こしの時だけ付く）
+    const marks = new Array(text.length).fill(false);
+    for (const [a, b] of ranges || []) for (let k = Math.max(0, a); k < Math.min(text.length, b); k++) marks[k] = true;
+    let k = 0;
+    while (k < text.length) {
+      const m = marks[k];
+      let j = k;
+      while (j < text.length && marks[j] === m && text[j] !== '\n') j++;
+      if (j === k) { el.appendChild(document.createElement('br')); k++; continue; }
+      const chunk = text.slice(k, j);
+      if (m) { const s = document.createElement('span'); s.className = 'unc'; s.textContent = chunk; el.appendChild(s); }
+      else el.appendChild(document.createTextNode(chunk));
+      k = j;
+    }
+  }
+  function buildList() {
+    list.textContent = '';
+    if (data.lead) { const p = document.createElement('p'); p.className = 'lead'; p.textContent = data.lead; list.appendChild(p); }
+    cues = data.cues.map((c, k) => {
+      const sec = document.createElement('section'); sec.className = 'cue';
+      const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = fmt(c.s) + ' ・ ' + (k + 1);
+      const t = document.createElement('p'); t.className = 't'; t.lang = data.lang || 'en'; renderText(t, c.t || '', c.u);
+      sec.append(meta, t);
+      if (c.alt) {
+        const alt = document.createElement('p'); alt.className = 'alt'; alt.lang = data.lang || 'en';
+        alt.textContent = '別の聞き取り: ' + c.alt;
+        sec.appendChild(alt);
+      }
+      if (c.ja) { const ja = document.createElement('p'); ja.className = 'ja'; ja.lang = 'ja'; renderText(ja, c.ja, null); sec.appendChild(ja); }
+      if (c.g && c.g.length) {
+        const ul = document.createElement('ul'); ul.className = 'gl';
+        for (const [w, pos, mean] of c.g) {
+          const li = document.createElement('li');
+          const b = document.createElement('b'); b.lang = data.lang || 'en'; b.textContent = w;
+          const i = document.createElement('i'); i.title = pos; i.textContent = POS_ABBR[pos] || (pos || '').slice(0, 1);
+          li.append(b, i, document.createTextNode(mean));
+          ul.appendChild(li);
+        }
+        sec.appendChild(ul);
+      }
+      sec.addEventListener('click', () => playFrom(k));
+      list.appendChild(sec);
+      return { el: sec, s: +c.s, e: +c.e };
+    });
+  }
+
+  // 全画面にすると下の字幕欄が見えないので、全画面の間だけ動画側に字幕を出す
+  function vttUrl(field) {
+    const ts = (x) => {
+      const h = Math.floor(x / 3600), m = Math.floor((x % 3600) / 60), s = (x % 60).toFixed(3).padStart(6, '0');
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + s;
+    };
+    let out = 'WEBVTT\n\n';
+    data.cues.forEach((c, k) => {
+      const text = String(c[field] || '').replace(/-->/g, '→').trim();
+      if (text) out += (k + 1) + '\n' + ts(+c.s) + ' --> ' + ts(+c.e) + '\n' + text + '\n\n';
+    });
+    const url = URL.createObjectURL(new Blob([out], { type: 'text/vtt' }));
+    trackUrls.push(url);
+    return url;
+  }
+  function setTracks() {
+    v.querySelectorAll('track').forEach((t) => t.remove());
+    trackUrls.forEach((u) => URL.revokeObjectURL(u)); trackUrls = [];
+    const add = (field, lang, label) => {
+      const tr = document.createElement('track');
+      tr.kind = 'subtitles'; tr.srclang = lang; tr.label = label; tr.src = vttUrl(field);
+      v.appendChild(tr);
+      tr.track.mode = 'hidden';
+    };
+    add('t', data.lang || 'en', data.langLabel || '字幕');
+    if (data.cues.some((c) => c.ja)) add('ja', 'ja', '日本語');
+  }
+  function showTracks(on) {
+    const tracks = Array.from(v.textTracks || []);
+    tracks.forEach((t, k) => { t.mode = on && k === 0 ? 'showing' : 'hidden'; });
+  }
+  v.addEventListener('webkitbeginfullscreen', () => showTracks(true));
+  v.addEventListener('webkitendfullscreen', () => showTracks(false));
+  document.addEventListener('fullscreenchange', () => showTracks(document.fullscreenElement === v));
+
+  // 学習中は画面を消さない（対応していない環境では何もしない）
+  let wakeLock = null;
+  async function keepAwake() {
+    try {
+      if (!('wakeLock' in navigator) || playerView.hidden || document.visibilityState !== 'visible' || wakeLock) return;
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (_) { wakeLock = null; }
+  }
+  function letSleep() { try { if (wakeLock) wakeLock.release(); } catch (_) { /* 解放済み */ } wakeLock = null; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') keepAwake();
+    else if (id && hasVideo) store.set('t:' + id, v.currentTime);
+  });
+
+  function cueAt(t) {
+    let lo = 0, hi = cues.length - 1, ans = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (cues[m].s <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+    return ans;
+  }
+  function endPoint(k) {
+    const c = cues[k], n = cues[k + 1];
+    return n ? Math.max(c.e, Math.min(c.e + PAD, n.s)) : c.e + PAD;
+  }
+  function insetTop() { return landscape.matches ? 0 : top.getBoundingClientRect().height; }
+  function scrollToCur(force) {
+    if (cur < 0) return;
+    const r = cues[cur].el.getBoundingClientRect(), inset = insetTop(), avail = window.innerHeight - inset;
+    if (!force && r.top >= inset + avail * 0.08 && r.bottom <= inset + avail * 0.7) return;
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top - inset - avail * 0.2), behavior: force ? 'auto' : 'smooth' });
+  }
+  function setCur(k) {
+    if (k === cur) return;
+    if (cur >= 0 && cues[cur]) cues[cur].el.classList.remove('cur');
+    cur = k;
+    if (cur >= 0) { cues[cur].el.classList.add('cur'); if (follow) scrollToCur(false); }
+  }
+  function tick() {
+    const t = v.currentTime;
+    if (step && !v.paused && stopIdx >= 0 && stopIdx < cues.length && t >= endPoint(stopIdx)) {
+      v.pause(); stoppedAt = stopIdx; stopIdx += 1; setCur(stoppedAt); return;
+    }
+    if (t >= holdUntil) { holdUntil = -1; setCur(cueAt(t)); }
+    if (!v.paused) raf = requestAnimationFrame(tick);
+  }
+  function playFrom(k) {
+    if (!hasVideo || k < 0 || k >= cues.length) return;
+    ourSeek = true; stoppedAt = -1; holdUntil = cues[k].s; stopIdx = k;
+    setFollow(true); setCur(k); scrollToCur(true);
+    v.currentTime = Math.max(0, cues[k].s - ROLL);
+    v.play().catch(() => {});
+    keepAwake();
+  }
+  const base = () => (v.paused && stoppedAt >= 0 ? stoppedAt : cur);
+  function setFollow(on) { follow = on; followBtn.hidden = on; }
+
+  $('prev').onclick = () => playFrom(Math.max(0, base() - 1));
+  $('again').onclick = () => playFrom(Math.max(0, base()));
+  $('next').onclick = () => playFrom(Math.min(cues.length - 1, base() + 1));
+  function applyToggles() {
+    $('step').setAttribute('aria-pressed', String(step));
+    $('speed').textContent = (speed === 1 ? '1.0' : String(speed)) + 'x';
+    v.playbackRate = speed;
+    const hideJa = store.get('hideJa', false), hideGl = store.get('hideGl', false);
+    document.body.classList.toggle('hide-ja', hideJa); $('tja').setAttribute('aria-pressed', String(!hideJa));
+    document.body.classList.toggle('hide-gl', hideGl); $('tgl').setAttribute('aria-pressed', String(!hideGl));
+  }
+  $('step').onclick = () => {
+    step = !step; store.set('step', step);
+    const t = v.currentTime, c = cueAt(t);
+    stopIdx = c < 0 ? 0 : (t < endPoint(c) ? c : c + 1);
+    applyToggles();
+  };
+  $('speed').onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; store.set('speed', speed); applyToggles(); };
+  $('tja').onclick = () => { store.set('hideJa', !store.get('hideJa', false)); applyToggles(); };
+  $('tgl').onclick = () => { store.set('hideGl', !store.get('hideGl', false)); applyToggles(); };
+  $('back').onclick = () => closePlayer();
+  followBtn.onclick = () => { setFollow(true); scrollToCur(true); };
+  const manual = (e) => { if (follow && !playerView.hidden && !(e.target instanceof Node && top.contains(e.target))) setFollow(false); };
+  window.addEventListener('touchmove', manual, { passive: true });
+  window.addEventListener('wheel', manual, { passive: true });
+  document.addEventListener('keydown', (e) => {
+    if (playerView.hidden || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === ' ' && e.target.tagName !== 'BUTTON') { e.preventDefault(); if (v.paused) v.play().catch(() => {}); else v.pause(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); $('prev').click(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); $('next').click(); }
+    else if (e.key === 'r') $('again').click();
+  });
+
+  v.addEventListener('play', () => { stoppedAt = -1; cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); keepAwake(); });
+  v.addEventListener('pause', () => { cancelAnimationFrame(raf); if (id && hasVideo) store.set('t:' + id, v.currentTime); });
+  v.addEventListener('seeking', () => {
+    if (ourSeek) { ourSeek = false; return; }
+    stoppedAt = -1; holdUntil = -1;
+    const t = v.currentTime, c = cueAt(t);
+    stopIdx = c < 0 ? 0 : (t < endPoint(c) ? c : c + 1);
+    setCur(c);
+  });
+  v.addEventListener('seeked', () => { if (v.paused) tick(); });
+  let lastSave = 0;
+  v.addEventListener('timeupdate', () => {
+    if (id && Math.abs(v.currentTime - lastSave) >= 3) { lastSave = v.currentTime; store.set('t:' + id, v.currentTime); }
+  });
+
+  function showInfo(parts) {
+    info.textContent = '';
+    for (const p of parts) info.appendChild(typeof p === 'string' ? document.createTextNode(p) : p);
+    info.hidden = !parts.length;
+  }
+  v.addEventListener('loadedmetadata', () => {
+    if (!picked) return;
+    hasVideo = true; picker.hidden = true;
+    v.playbackRate = speed;
+    const parts = [];
+    if (data.duration && Math.abs(v.duration - data.duration) > 1.5) {
+      parts.push('選んだ動画の長さ（' + fmt(v.duration) + '）が字幕データ（' + fmt(data.duration) + '）と合いません。別の動画かもしれません。');
+    }
+    const t0 = store.get('t:' + id, 0);
+    if (t0 > 5 && t0 < v.duration - 5) {
+      if (parts.length) parts.push(document.createElement('br'));
+      parts.push('前回は ' + fmt(t0) + ' まで見ました。');
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = '続きから';
+      b.onclick = () => { playFrom(Math.max(0, cueAt(t0))); showInfo([]); };
+      parts.push(b);
+    }
+    showInfo(parts);
+  });
+  v.addEventListener('error', () => {
+    if (!picked) return;
+    hasVideo = false; picker.hidden = false;
+    pickmsg.textContent = 'この動画は再生できませんでした。別のファイルを選んでください。';
+  });
+  function clearVideo() {
+    hasVideo = false; picked = false;
+    v.pause();
+    try { v.srcObject = null; } catch (_) { /* 未対応 */ }
+    v.removeAttribute('src');
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+    v.load();
+  }
+  $('pickVideo').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    clearVideo();
+    picked = true; pickmsg.textContent = '読み込んでいます…';
+    // Safari は File をそのまま渡せる（大きい動画で blob URL より安定）。渡せないブラウザは blob URL にする
+    let direct = false;
+    if ('srcObject' in v) { try { v.srcObject = f; direct = true; } catch (_) { direct = false; } }
+    if (!direct) { objectUrl = URL.createObjectURL(f); v.src = objectUrl; }
+    keepAwake();
+  });
+
+  function openPlayer(itemId) {
+    const d = store.get('data:' + itemId, null);
+    if (!d) { note(libNote, '字幕データが見つかりません。もう一度「字幕データを追加」で読み込んでください。'); return; }
+    data = d; id = itemId;
+    cur = -1; holdUntil = -1; stopIdx = -1; stoppedAt = -1; setFollow(true);
+    buildList(); setTracks(); applyToggles(); showInfo([]);
+    $('expect').textContent = data.video ? '探すファイル: ' + data.video : '';
+    pickmsg.textContent = '動画を選んでください。「ファイルを選択」から選びます（写真ライブラリからは選ばない）。';
+    picker.hidden = false;
+    libView.hidden = true; playerView.hidden = false;
+    window.scrollTo(0, 0);
+    keepAwake();
+  }
+  function closePlayer() {
+    if (id && hasVideo) store.set('t:' + id, v.currentTime);
+    const lib = libIndex().map((x) => (x.id === id ? Object.assign({}, x, { t: store.get('t:' + id, 0) }) : x));
+    store.set('lib', lib);
+    clearVideo(); letSleep();
+    data = null; id = ''; cues = []; list.textContent = '';
+    playerView.hidden = true; libView.hidden = false;
+    renderLib();
+  }
+
+  applyToggles();
+  renderLib();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* file:// 等では使えない */ });
+})();
+</script>
+</body>
+</html>
