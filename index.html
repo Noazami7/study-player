@@ -69,8 +69,27 @@ button { font: inherit; color: inherit; }
   flex: 1; min-height: 40px; padding: 0 2px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--btn); font-size: 14px; cursor: pointer; touch-action: manipulation;
 }
-.row.sub button { min-height: 34px; font-size: 12.5px; }
+/* 上の段は 7 個並ぶので、等分にせず文字の長さに応じて幅を配る（等分だと狭い画面で「1行ずつ」が「1行ず／つ」と折り返す。
+   ボタンの高さは変わらないので、寸法を測っても気づけない） */
+.row.sub button { flex: 1 1 auto; min-height: 34px; font-size: 12.5px; white-space: nowrap; }
 .row button[aria-pressed="true"] { background: var(--on); color: var(--on-fg); border-color: transparent; }
+.row button:disabled { opacity: .45; cursor: default; }
+/* 縦持ちでは操作ボタンを画面の下端に固定する（親指が届く位置。よく押す 前・もう一度・次 を一番下に）。
+   下はホームインジケータの分を空ける。帯の上ではページをスクロールさせない（帯に触れた指では追従を切らない作りなので、
+   スクロールさせると次の行で今の行まで引き戻される） */
+#ctrl {
+  position: fixed; left: 0; right: 0; bottom: 0; touch-action: none;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg); border-top: 1px solid var(--line);
+}
+/* コピーの結果。iOS はクリップボードに書き込んでも何も知らせないので、ページで短く出す */
+#toast {
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); z-index: 21;
+  padding: 8px 14px; border-radius: 18px; background: var(--fg); color: var(--bg); font-size: 13px;
+  white-space: nowrap; pointer-events: none; box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+}
+/* 追従が切れて「今の行へ ↓」が右に出ている間は、左に寄せる（中央のままだと「コピーできませんでした」が重なる） */
+#follow:not([hidden]) + #toast { left: calc(14px + env(safe-area-inset-left)); transform: none; }
 #info { padding: 6px 12px; background: var(--note-bg); color: var(--note-fg); font-size: 13px; line-height: 1.5; }
 #info button { margin-left: 8px; padding: 2px 10px; border: 1px solid currentColor; border-radius: 8px; background: transparent; }
 
@@ -87,16 +106,28 @@ button { font: inherit; color: inherit; }
 .gl li { padding: 1px 7px; border-radius: 6px; background: var(--chip); font-size: 0.8rem; line-height: 1.7; }
 .gl b { margin-right: 4px; font-weight: 600; }
 .gl i { margin-right: 4px; font-size: 0.7rem; font-style: normal; color: var(--muted); }
-body.hide-ja .ja, body.hide-gl .gl { display: none; }
+/* 解説（字幕データの x。付いている行にだけ出る）。1 項目 1 行で、単語の意味より控えめにする */
+.ex { margin: 6px 0 0; padding: 1px 0 1px 8px; border-left: 2px solid var(--line); font-size: 0.78rem; line-height: 1.55; color: var(--muted); }
+/* 長い項目は折り返すので、続きの段を 1 字下げて項目の頭を見つけやすくする（揃えたままだと、全角の【は字形の左が空いて
+   いるので見出しの段のほうが右に寄って見え、項目どうしが 1 つの塊に見える）。下げても折り返しの段の数はほとんど変わらない */
+.ex p { margin: 0; padding-left: 1em; text-indent: -1em; }
+.ex p + p { margin-top: 2px; }
+.cue.cur .ex { border-left-color: var(--accent); }
+body.hide-ja .ja, body.hide-gl .gl, body.hide-ex .ex { display: none; }
+/* 縦持ちでは下端の帯のすぐ上に出す（帯と重ならない高さ） */
 #follow {
-  position: fixed; right: 14px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 20;
+  position: absolute; right: calc(14px + env(safe-area-inset-right)); bottom: calc(100% + 10px); z-index: 20;
   padding: 10px 16px; border: 0; border-radius: 22px; background: var(--on); color: var(--on-fg);
   font-size: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); cursor: pointer;
 }
+/* 横持ち: 左に動画と操作、右に字幕。操作ボタンは左の列の一番下に置き、画面の下端の帯にはしない */
 @media (orientation: landscape) and (max-height: 600px) {
   #playerView:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; }
   #top { height: 100vh; height: 100dvh; display: flex; flex-direction: column; border-bottom: 0; border-right: 1px solid var(--line); }
   #stage { flex: 1; min-height: 0; aspect-ratio: auto; }
+  #ctrl { position: relative; left: auto; right: auto; bottom: auto; padding: 0 0 env(safe-area-inset-bottom); border-top: 0; }
+  #follow { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); }
+  #follow:not([hidden]) + #toast { left: 50%; transform: translateX(-50%); }   /* 「今の行へ ↓」は右の列なので重ならない */
   #list { padding-bottom: 70vh; }
 }
 </style>
@@ -127,22 +158,29 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
         <p class="file" id="expect"></p>
       </div>
     </div>
-    <div class="row">
-      <button id="prev" type="button">◀ 前</button>
-      <button id="again" type="button">↻ もう一度</button>
-      <button id="next" type="button">次 ▶</button>
-    </div>
-    <div class="row sub">
-      <button id="step" type="button" aria-pressed="false">1行ずつ</button>
-      <button id="speed" type="button">1.0x</button>
-      <button id="tja" type="button" aria-pressed="true">日本語</button>
-      <button id="tgl" type="button" aria-pressed="true">単語</button>
-      <button id="back" type="button">一覧</button>
-    </div>
     <div id="info" hidden></div>
+    <!-- 「一覧」は押すと動画の選択が外れるので、いちばんよく押す 次・もう一度 の上を避けて左端に置く（それでも「◀ 前」の
+         真上なので、動画を読み込んでいる時は押すと確かめる）。コピーは押し違えても困らないので右端（次 の上） -->
+    <div id="ctrl">
+      <button id="follow" type="button" hidden>今の行へ ↓</button>
+      <div id="toast" role="status" hidden></div>
+      <div class="row sub">
+        <button id="back" type="button">一覧</button>
+        <button id="step" type="button" aria-pressed="false">1行ずつ</button>
+        <button id="speed" type="button">1.0x</button>
+        <button id="tja" type="button" aria-pressed="true">日本語</button>
+        <button id="tgl" type="button" aria-pressed="true">単語</button>
+        <button id="tex" type="button" aria-pressed="true" hidden>解説</button>
+        <button id="copy" type="button" disabled>コピー</button>
+      </div>
+      <div class="row">
+        <button id="prev" type="button">◀ 前</button>
+        <button id="again" type="button">↻ もう一度</button>
+        <button id="next" type="button">次 ▶</button>
+      </div>
+    </div>
   </header>
   <main id="list"></main>
-  <button id="follow" type="button" hidden>今の行へ ↓</button>
 </div>
 
 <script>
@@ -195,36 +233,46 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
   $('addData').addEventListener('change', async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
-    const added = [], failed = [];
+    const added = [], replaced = [], failed = [];
     for (const f of files) {
       try {
         const data = JSON.parse(await f.text());
         if (data.format !== 'study-player/1' || !Array.isArray(data.cues) || !data.cues.length) throw new Error('形式が違う');
         const id = String(data.id || data.video || f.name);
         if (!store.set('data:' + id, data)) throw new Error('保存できない（容量不足の可能性）');
+        // 同じ動画（同じ id）の字幕データは置き換える（解説などを直した版を入れ直す時）。前回位置は動画の時刻なのでそのまま使える
+        const old = libIndex().find((x) => x.id === id);
         const lib = libIndex().filter((x) => x.id !== id);
-        lib.unshift({ id, title: data.title || f.name, duration: data.duration || 0, cues: data.cues.length });
+        lib.unshift({ id, title: data.title || f.name, duration: data.duration || 0, cues: data.cues.length, t: old ? old.t : undefined });
         store.set('lib', lib);
-        added.push(data.title || f.name);
+        (old ? replaced : added).push(data.title || f.name);
       } catch (err) {
         failed.push(f.name + '（' + err.message + '）');
       }
     }
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) { /* 任意 */ }
-    note(libNote, (added.length ? added.length + ' 本追加しました。' : '') + (failed.length ? '追加できなかったもの: ' + failed.join(' / ') : ''));
+    note(libNote, (added.length ? added.length + ' 本追加しました。' : '') +
+      (replaced.length ? replaced.length + ' 本は同じ動画の字幕データを新しいものに置き換えました。' : '') +
+      (failed.length ? '追加できなかったもの: ' + failed.join(' / ') : ''));
     renderLib();
   });
 
   // ---------------- プレイヤー ----------------
   const v = $('v'), picker = $('picker'), pickmsg = $('pickmsg'), info = $('info'), top = $('top'), followBtn = $('follow'), list = $('list');
+  const ctrl = $('ctrl'), copyBtn = $('copy'), texBtn = $('tex'), toast = $('toast');
   const ROLL = 0.25;   // 行の頭から再生する時に少し手前から始める（語頭を切らないため）
   const PAD = 0.25;    // 1行ずつ止める時、字幕の終わりから少し待つ（次の行の頭は越えない）
+  const LATE = 0.5;    // 1行ずつ: 止める点をこれ以上過ぎてから気づいた時は、その行では止めない（tick のコメント）
   const SPEEDS = [1, 0.85, 0.7];
   const landscape = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
 
   let data = null, id = '', cues = [];
-  let cur = -1, holdUntil = -1, stopIdx = -1, stoppedAt = -1;
-  let ourSeek = false, follow = true, raf = 0, hasVideo = false, picked = false, objectUrl = null, trackUrls = [];
+  let cur = -1, holdUntil = -1, stoppedAt = -1;
+  let stopIdx = 0;     // 1行ずつ: この行の終わりで止める（動画は 0 秒から始まるので、最初は最初の行）
+  let seekTo = -1;     // playFrom で飛ばした先。seeking の時刻がこれなら自分のシーク（素早く 2 度押すと
+                       // seeking が続けて 2 回届き、どちらも後の飛び先を指す。1 回で消える印だと 2 回目を指の操作と取り違える）
+  let moved = false;   // 動画を読み込んでから再生か移動をしたか（していない間は前回位置を覚えない）
+  let follow = true, raf = 0, hasVideo = false, picked = false, objectUrl = null, trackUrls = [];
   let step = store.get('step', false), speed = store.get('speed', 1);
 
   function renderText(el, text, ranges) {
@@ -246,6 +294,7 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
   function buildList() {
     list.textContent = '';
     if (data.lead) { const p = document.createElement('p'); p.className = 'lead'; p.textContent = data.lead; list.appendChild(p); }
+    let withEx = 0;
     cues = data.cues.map((c, k) => {
       const sec = document.createElement('section'); sec.className = 'cue';
       const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = fmt(c.s) + ' ・ ' + (k + 1);
@@ -268,10 +317,19 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
         }
         sec.appendChild(ul);
       }
+      // 解説: 表示順に並んだ文字列の配列。1 項目を 1 段にする
+      const ex = (Array.isArray(c.x) ? c.x : []).map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
+      if (ex.length) {
+        const div = document.createElement('div'); div.className = 'ex'; div.lang = 'ja';
+        for (const x of ex) { const p = document.createElement('p'); p.textContent = x; div.appendChild(p); }
+        sec.appendChild(div);
+        withEx += 1;
+      }
       sec.addEventListener('click', () => playFrom(k));
       list.appendChild(sec);
       return { el: sec, s: +c.s, e: +c.e };
     });
+    texBtn.hidden = !withEx; // 解説の付いた行が無い字幕データでは「解説」ボタンを出さない
   }
 
   // 全画面にすると下の字幕欄が見えないので、全画面の間だけ動画側に字幕を出す
@@ -321,7 +379,7 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
   function letSleep() { try { if (wakeLock) wakeLock.release(); } catch (_) { /* 解放済み */ } wakeLock = null; }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') keepAwake();
-    else if (id && hasVideo) store.set('t:' + id, v.currentTime);
+    else savePos();
   });
 
   function cueAt(t) {
@@ -333,32 +391,65 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
     const c = cues[k], n = cues[k + 1];
     return n ? Math.max(c.e, Math.min(c.e + PAD, n.s)) : c.e + PAD;
   }
+  // 字幕の行が見える範囲: 上は動画（と案内）の下端、下は縦持ちなら下端のボタン帯の上端（横持ちはどちらも列の外なので 0）
   function insetTop() { return landscape.matches ? 0 : top.getBoundingClientRect().height; }
+  function insetBottom() { return landscape.matches ? 0 : Math.max(0, window.innerHeight - ctrl.getBoundingClientRect().top); }
   function scrollToCur(force) {
     if (cur < 0) return;
-    const r = cues[cur].el.getBoundingClientRect(), inset = insetTop(), avail = window.innerHeight - inset;
+    const r = cues[cur].el.getBoundingClientRect(), inset = insetTop(), avail = window.innerHeight - inset - insetBottom();
     if (!force && r.top >= inset + avail * 0.08 && r.bottom <= inset + avail * 0.7) return;
-    window.scrollTo({ top: Math.max(0, window.scrollY + r.top - inset - avail * 0.2), behavior: force ? 'auto' : 'smooth' });
+    // 普段は行の頭を上から 2 割の位置に置く。解説を出した行のように背が高く、それだと下端がボタン帯に
+    // 隠れる時だけ、行の終わりまで見える位置まで上へ寄せる（入りきらなければ行の頭を上端に合わせる）
+    const off = Math.max(8, Math.min(avail * 0.2, avail - r.height - 8));
+    window.scrollTo({ top: Math.max(0, window.scrollY + r.top - inset - off), behavior: force ? 'auto' : 'smooth' });
   }
   function setCur(k) {
     if (k === cur) return;
     if (cur >= 0 && cues[cur]) cues[cur].el.classList.remove('cur');
     cur = k;
+    copyBtn.disabled = cur < 0;
     if (cur >= 0) { cues[cur].el.classList.add('cur'); if (follow) scrollToCur(false); }
   }
+  // 1行ずつ: 止めた後に次に止める行。前の行の中に収まった短い行（止める点をもう過ぎている）は飛ばす（飛ばさないと、
+  // 動画の ▶ で続きを再生した途端にその行で止まり、▶ を 2 回押すことになる。「次」では今までどおりその行へ行く）
+  function nextStop(k, t) { while (k < cues.length && endPoint(k) <= t) k += 1; return k; }
+  // 色を付ける行。1行ずつの間は止める行より先へ進めない（次の行が今の行の終わりより前に始まると、色が次の行へ
+  // 移ってから、止めた時に今の行へ戻ってしまう）
+  function rowAt(t) { const c = cueAt(t); return step ? Math.min(c, stopIdx) : c; }
   function tick() {
     const t = v.currentTime;
-    if (step && !v.paused && stopIdx >= 0 && stopIdx < cues.length && t >= endPoint(stopIdx)) {
-      v.pause(); stoppedAt = stopIdx; stopIdx += 1; setCur(stoppedAt); return;
+    // シークの途中は止めない（currentTime は飛び先で、再生が進んだ位置ではない。シークバーで先へ飛んだ直後、
+    // seeking が届く前に画面の書き換えが来ると、前の止める行の終わりを越えたと見て止めてしまう）。
+    // 止まっている時の tick（pause・seeked から呼ぶ）は止めず、止める点を LATE 以上過ぎていれば止める行を引き直すだけにする
+    if (step && !v.seeking && stopIdx >= 0 && stopIdx < cues.length && t >= endPoint(stopIdx) &&
+        (!v.paused || t >= endPoint(stopIdx) + LATE)) {
+      if (t < endPoint(stopIdx) + LATE) {
+        // 止める点は行の頭より後なので、巻き戻しも終わっている（画面の書き換えが止まった後の 1 回の tick で行の頭と
+        // 止める点を両方越えた時に、巻き戻しの印を残さない）
+        v.pause(); holdUntil = -1; stoppedAt = stopIdx; stopIdx = nextStop(stopIdx + 1, t); setCur(stoppedAt); return;
+      }
+      // 止める点を大きく過ぎてから気づいた: 動画は進んだまま画面の書き換えだけが止まっていた（全画面・ピクチャインピクチャ
+      // など）。古い行で止めて色を何行も前へ戻さず、今の時刻から止める行を引き直す。その間に一時停止した時も同じ
+      // （引き直さないと、色は古い止める行で頭打ちになったまま残り、「もう一度」「前」「次」がその行を基準に動く）
+      const c = cueAt(t);
+      stopIdx = c < 0 ? 0 : (t < endPoint(c) ? c : c + 1);
     }
-    if (t >= holdUntil) { holdUntil = -1; setCur(cueAt(t)); }
+    if (t >= holdUntil) { holdUntil = -1; setCur(rowAt(t)); }
     if (!v.paused) raf = requestAnimationFrame(tick);
   }
   function playFrom(k) {
     if (!hasVideo || k < 0 || k >= cues.length) return;
-    ourSeek = true; stoppedAt = -1; holdUntil = cues[k].s; stopIdx = k;
+    // 行から見始めたら「続きから」などの案内を消す（動画の下で高さを取り、解説を出した背の高い行が下端の帯に隠れる）。
+    // 動画の ▶ では消さない（押し違えて頭から見始めても、案内の「続きから」で前回の位置へ戻れるように。消すと、その後の
+    // 一時停止か 3 秒の再生で前回位置が上書きされ、戻る手段が無くなる）
+    if (!info.hidden) showInfo([]);
+    stoppedAt = -1; holdUntil = cues[k].s; stopIdx = k;
     setFollow(true); setCur(k); scrollToCur(true);
-    v.currentTime = Math.max(0, cues[k].s - ROLL);
+    seekTo = Math.max(0, cues[k].s - ROLL);
+    // 同じ時刻へのシークがまだ終わっていなければ飛ばし直さない（「もう一度」の素早い 2 度押しなど）。WebKit はシークの途中で
+    // 同じ時刻へ飛ばすと何もしないシークとして扱い、seeking（v.seeking は false）と seeked をすぐ出して seeking を解く。
+    // 本当のシークが終わる前に印（seekTo）が消え、tick の !v.seeking も効かなくなる
+    if (!(v.seeking && Math.abs(v.currentTime - seekTo) < 0.01)) v.currentTime = seekTo;
     v.play().catch(() => {});
     keepAwake();
   }
@@ -372,21 +463,73 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
     $('step').setAttribute('aria-pressed', String(step));
     $('speed').textContent = (speed === 1 ? '1.0' : String(speed)) + 'x';
     v.playbackRate = speed;
-    const hideJa = store.get('hideJa', false), hideGl = store.get('hideGl', false);
+    const hideJa = store.get('hideJa', false), hideGl = store.get('hideGl', false), hideEx = store.get('hideEx', false);
     document.body.classList.toggle('hide-ja', hideJa); $('tja').setAttribute('aria-pressed', String(!hideJa));
     document.body.classList.toggle('hide-gl', hideGl); $('tgl').setAttribute('aria-pressed', String(!hideGl));
+    document.body.classList.toggle('hide-ex', hideEx); texBtn.setAttribute('aria-pressed', String(!hideEx));
   }
   $('step').onclick = () => {
     step = !step; store.set('step', step);
-    const t = v.currentTime, c = cueAt(t);
+    // 行の頭へ飛んだ直後（少し手前から再生している間）は、時刻で引くと 1 つ前の行に当たるので、色を付けている行を使う
+    const t = v.currentTime, c = holdUntil >= 0 ? cur : cueAt(t);
     stopIdx = c < 0 ? 0 : (t < endPoint(c) ? c : c + 1);
     applyToggles();
   };
   $('speed').onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; store.set('speed', speed); applyToggles(); };
   $('tja').onclick = () => { store.set('hideJa', !store.get('hideJa', false)); applyToggles(); };
   $('tgl').onclick = () => { store.set('hideGl', !store.get('hideGl', false)); applyToggles(); };
-  $('back').onclick = () => closePlayer();
+  // 解説の出し入れは行の高さが大きく変わるので、今の行を見える位置に戻す
+  texBtn.onclick = () => { store.set('hideEx', !store.get('hideEx', false)); applyToggles(); if (follow) scrollToCur(true); };
+  // 一覧へ戻ると選んだ動画が外れ、iPhone では「ファイルを選択」からたどり直しになる。よく押す「◀ 前」の真上にあって
+  // 押し違えやすいので、動画を読み込んでいる時は確かめる。確かめている間はページのスクリプトが止まるが動画は進む
+  // （迷っている間に「1行ずつ」の止める点を過ぎる）ので、再生中なら止めてから聞き、キャンセルなら再生に戻す
+  // （confirm は同期なので、play() はタップの処理の中に収まる）
+  $('back').onclick = () => {
+    const playing = hasVideo && !v.paused;
+    if (playing) v.pause();
+    if (hasVideo && !window.confirm('一覧に戻りますか？（選んだ動画は外れます。前回の位置は残ります）')) {
+      if (playing) v.play().catch(() => {});
+      return;
+    }
+    closePlayer();
+  };
   followBtn.onclick = () => { setFollow(true); scrollToCur(true); };
+  // 向きを変えるとレイアウトが変わる（横持ちは 2 列）ので、追従中なら今の行を見える位置に戻す
+  if (landscape.addEventListener) landscape.addEventListener('change', () => { if (follow && !playerView.hidden) scrollToCur(true); });
+
+  // コピー: 今の行の英語と日本語を 2 行で（日本語が無ければ英語だけ。AI に貼って聞く時など）。押した時だけ写し、
+  // 再生に合わせては写さない。Clipboard API はクリックの処理の中で呼ぶ（iOS は操作の外からの書き込みを拒む）
+  const oneLine = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  function execCopy(text) {
+    // Clipboard API が無い・拒まれた時は、隠した textarea を選んでコピーする旧来の方法に落とす
+    // （readonly はキーボードを出さないため。iOS は select() だけでは選ばれないことがあるので範囲も指定する）
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;font-size:16px';
+    document.body.appendChild(ta);
+    let ok = false;
+    try { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); ok = document.execCommand('copy'); } catch (_) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  let toastTimer = 0;
+  function showToast(text) {
+    toast.textContent = text; toast.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 1600);
+  }
+  copyBtn.onclick = () => {
+    if (cur < 0 || !data || !data.cues[cur]) return;
+    const c = data.cues[cur], text = [oneLine(c.t), oneLine(c.ja)].filter(Boolean).join('\n');
+    if (!text) return;
+    let write;
+    try {
+      write = window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(text).then(() => true, () => execCopy(text))
+        : Promise.resolve(execCopy(text));
+    } catch (_) { write = Promise.resolve(execCopy(text)); }
+    // 失敗した時は、字幕の行を長押しすれば文字を選べる
+    write.then((ok) => showToast(ok ? 'コピーしました' : 'コピーできませんでした'));
+  };
   const manual = (e) => { if (follow && !playerView.hidden && !(e.target instanceof Node && top.contains(e.target))) setFollow(false); };
   window.addEventListener('touchmove', manual, { passive: true });
   window.addEventListener('wheel', manual, { passive: true });
@@ -398,20 +541,37 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
     else if (e.key === 'r') $('again').click();
   });
 
-  v.addEventListener('play', () => { stoppedAt = -1; cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); keepAwake(); });
-  v.addEventListener('pause', () => { cancelAnimationFrame(raf); if (id && hasVideo) store.set('t:' + id, v.currentTime); });
+  v.addEventListener('play', () => { moved = true; stoppedAt = -1; cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); keepAwake(); });
+  // 止まった時刻の行に色を合わせる（全画面・ピクチャインピクチャなどで画面の書き換えが止まっている間に一時停止すると、
+  // tick が回らないまま止まり、色と巻き戻しの印が古いまま残って「もう一度」「前」「次」がずれる）。止まっている tick は
+  // 止めない（「1行ずつ」の止める点を LATE 以上過ぎていれば、止める行を引き直す）。「1行ずつ」で止めた後は seeked と同じく動かさない
+  v.addEventListener('pause', () => { cancelAnimationFrame(raf); if (v.paused && stoppedAt < 0) tick(); savePos(); });
   v.addEventListener('seeking', () => {
-    if (ourSeek) { ourSeek = false; return; }
-    stoppedAt = -1; holdUntil = -1;
+    moved = true;
+    if (Math.abs(v.currentTime - seekTo) < 0.01) return;
+    seekTo = -1; stoppedAt = -1; holdUntil = -1;
     const t = v.currentTime, c = cueAt(t);
     stopIdx = c < 0 ? 0 : (t < endPoint(c) ? c : c + 1);
     setCur(c);
   });
-  v.addEventListener('seeked', () => { if (v.paused) tick(); });
-  let lastSave = 0;
-  v.addEventListener('timeupdate', () => {
-    if (id && Math.abs(v.currentTime - lastSave) >= 3) { lastSave = v.currentTime; store.set('t:' + id, v.currentTime); }
+  v.addEventListener('seeked', () => {
+    // 飛び終えたら印を消す（残すと、見終わった後の ▶ やシークバーの左端による 0 秒へのシークを、
+    // 最初の行の頭が 0 秒に近い動画で自分のシークと取り違える）。次のシークがもう始まっていれば残す
+    if (!v.seeking) seekTo = -1;
+    // 止まっている間に飛んだ時は色を合わせる。ただし「1行ずつ」で止めた後は動かさない（シークの完了から seeked が届くまでの
+    // 間に画面の書き換えが入ってそこで止めると、遅れて届いた seeked で色だけが止めた行の次へ進み、「次」「もう一度」とずれる）
+    if (v.paused && stoppedAt < 0) tick();
   });
+
+  // 前回位置（「続きから」用）。行の頭へ飛んだ直後は少し手前にいるので、行の頭を覚える（手前の時刻だと「続きから」が
+  // 1 つ前の行になる）。読み込んでから再生も移動もしていない動画では覚えない（読み込んだ時や外した時の 0 秒で上書きしない）
+  function resumePoint() { return Math.max(v.currentTime, holdUntil); }
+  let lastSave = 0;
+  function savePos() {
+    if (!id || !hasVideo || !moved) return;
+    lastSave = resumePoint(); store.set('t:' + id, lastSave);
+  }
+  v.addEventListener('timeupdate', () => { if (Math.abs(resumePoint() - lastSave) >= 3) savePos(); });
 
   function showInfo(parts) {
     info.textContent = '';
@@ -443,6 +603,8 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
   });
   function clearVideo() {
     hasVideo = false; picked = false;
+    // 次の動画はシークなしで 0 秒から始まるので、外した動画の行の状態を最初に戻す
+    stopIdx = 0; stoppedAt = -1; holdUntil = -1; seekTo = -1; moved = false;
     v.pause();
     try { v.srcObject = null; } catch (_) { /* 未対応 */ }
     v.removeAttribute('src');
@@ -466,7 +628,8 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
     const d = store.get('data:' + itemId, null);
     if (!d) { note(libNote, '字幕データが見つかりません。もう一度「字幕データを追加」で読み込んでください。'); return; }
     data = d; id = itemId;
-    cur = -1; holdUntil = -1; stopIdx = -1; stoppedAt = -1; setFollow(true);
+    cur = -1; holdUntil = -1; stopIdx = 0; stoppedAt = -1; seekTo = -1; setFollow(true);
+    copyBtn.disabled = true;
     buildList(); setTracks(); applyToggles(); showInfo([]);
     $('expect').textContent = data.video ? '探すファイル: ' + data.video : '';
     pickmsg.textContent = '動画を選んでください。「ファイルを選択」から選びます（写真ライブラリからは選ばない）。';
@@ -476,10 +639,11 @@ body.hide-ja .ja, body.hide-gl .gl { display: none; }
     keepAwake();
   }
   function closePlayer() {
-    if (id && hasVideo) store.set('t:' + id, v.currentTime);
+    savePos();
     const lib = libIndex().map((x) => (x.id === id ? Object.assign({}, x, { t: store.get('t:' + id, 0) }) : x));
     store.set('lib', lib);
     clearVideo(); letSleep();
+    clearTimeout(toastTimer); toast.hidden = true;
     data = null; id = ''; cues = []; list.textContent = '';
     playerView.hidden = true; libView.hidden = false;
     renderLib();
