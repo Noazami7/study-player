@@ -1,0 +1,9 @@
+{
+  "name": "study-player-tests",
+  "private": true,
+  "description": "再生まわりの不変条件ハーネス（invariants.mjs）用。jsdom だけを使う",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "jsdom": "~29.1.1"
+  }
+}
